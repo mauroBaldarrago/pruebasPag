@@ -3,10 +3,10 @@ header("Content-Type: application/json");
 
 // ================= CONFIGURACIÓN REAL PARA RAILWAY =================
 // getenv() leerá automáticamente las variables de tu panel de Railway
-$host = getenv('MYSQLHOST') ?: "tu_host_aqui"; 
-$dbname = getenv('MYSQLDATABASE') ?: "railway";
+$host = getenv('MYSQLHOST') ?: "mysql.railway.internal"; 
 $user = getenv('MYSQLUSER') ?: "root";
-$pass = getenv('MYSQLPASSWORD') ?: "tu_clave_aqui";
+$pass = getenv('MYSQLPASSWORD') ?: "DqutakVFwFugWYWJxOPNlHONyhifAIMt";
+$db   = getenv('MYSQLDATABASE') ?: "railway";
 $port = getenv('MYSQLPORT') ?: "3306";
 
 try {
