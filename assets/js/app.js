@@ -1,94 +1,158 @@
 document.addEventListener("DOMContentLoaded", () => {
 
-    // UTILIDADES DE DATOS
-    function obtenerUsuarios() {
-        return JSON.parse(localStorage.getItem("usuarios")) || [];
-    }
-
-    function guardarUsuarios(usuarios) {
-        localStorage.setItem("usuarios", JSON.stringify(usuarios));
-    }
-
+    // ================= UTILIDADES =================
     function getUsuarioLogueado() {
         return localStorage.getItem("usuarioLogueado");
     }
 
-    function getNombreUsuario() {
+    async function getNombreUsuario() {
         const correo = getUsuarioLogueado();
         if (!correo) return null;
-        const usuarios = obtenerUsuarios();
-        const usuario = usuarios.find(u => u.correo === correo);
-        return usuario ? usuario.usuario : correo;
+        try {
+            const res = await fetch(`api.php?action=getUsuario&correo=${correo}`);
+            const data = await res.json();
+            return data.usuario || correo;
+        } catch (err) {
+            console.error(err);
+            return correo;
+        }
     }
 
-    function obtenerNotas() {
-        return JSON.parse(localStorage.getItem("notas")) || {};
+    async function obtenerNotas() {
+        const correo = getUsuarioLogueado();
+        if (!correo) return [];
+        try {
+            const res = await fetch(`api.php?action=getNotas&correo=${correo}`);
+            const data = await res.json();
+            return data || [];
+        } catch (err) {
+            console.error("Error al obtener notas:", err);
+            return [];
+        }
     }
 
-    function guardarNotas(notas) {
-        localStorage.setItem("notas", JSON.stringify(notas));
+    async function guardarNotas(nota) {
+        const correo = getUsuarioLogueado();
+        if (!correo) return false;
+        try {
+            const res = await fetch('api.php?action=addNota', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ correo, ...nota })
+            });
+            const data = await res.json();
+            return data.ok;
+        } catch (err) {
+            console.error("Error al guardar nota:", err);
+            return false;
+        }
     }
 
-    // PROTECCIÓN DE RUTA
+    async function actualizarNota(nota) {
+        try {
+            const res = await fetch('api.php?action=updateNota', {
+                method:'POST',
+                headers:{ 'Content-Type':'application/json' },
+                body: JSON.stringify(nota)
+            });
+            await res.json();
+        } catch(err) { console.error(err); }
+    }
+
+    async function eliminarNota(id) {
+        try {
+            const res = await fetch('api.php?action=deleteNota', {
+                method:'POST',
+                headers:{ 'Content-Type':'application/json' },
+                body: JSON.stringify({ id })
+            });
+            await res.json();
+        } catch(err) { console.error(err); }
+    }
+
+    async function registrarUsuario(nombre, correo, clave) {
+        try {
+            const res = await fetch('api.php?action=addUsuario', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nombre, correo, clave, plan: "normal" })
+            });
+            const data = await res.json();
+            return data.ok;
+        } catch (err) {
+            console.error("Error al registrar usuario:", err);
+            return false;
+        }
+    }
+
+    async function loginUsuario(correo, clave) {
+        try {
+            const res = await fetch('api.php?action=login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ correo, clave })
+            });
+            const data = await res.json();
+            return data.ok;
+        } catch (err) {
+            console.error("Error al iniciar sesión:", err);
+            return false;
+        }
+    }
+
+    // ================= PROTECCIÓN DE RUTA =================
     if (document.title.includes("Notas") && !getUsuarioLogueado()) {
         window.location.href = "pag_IniciarSesion.html";
     }
 
-    // GESTIÓN DE REGISTRO
+    // ================= REGISTRO =================
     const registerForm = document.getElementById("registerForm");
     if (registerForm) {
-        registerForm.addEventListener("submit", e => {
+        registerForm.addEventListener("submit", async e => {
             e.preventDefault();
             const usuario = document.getElementById("usuario").value.trim();
             const correo = document.getElementById("correo").value.trim();
             const clave = document.getElementById("clave").value;
-            const usuarios = obtenerUsuarios();
-
-            if (usuarios.some(u => u.correo === correo)) {
-                alert("Este correo ya está registrado");
-                return;
+            const ok = await registrarUsuario(usuario, correo, clave);
+            if (ok) {
+                alert("Cuenta creada correctamente. Ahora inicia sesión.");
+                window.location.href = "pag_IniciarSesion.html";
+            } else {
+                alert("Error: Este correo ya está registrado o hubo un problema.");
             }
-
-            usuarios.push({ usuario, correo, clave, plan: "normal" });
-            guardarUsuarios(usuarios);
-            alert("Cuenta creada correctamente. Ahora inicia sesión.");
-            window.location.href = "pag_IniciarSesion.html";
         });
     }
 
-    // GESTIÓN DE LOGIN
+    // ================= LOGIN =================
     const loginForm = document.getElementById("loginForm");
     if (loginForm) {
-        loginForm.addEventListener("submit", e => {
+        loginForm.addEventListener("submit", async e => {
             e.preventDefault();
             const correo = document.getElementById("correo").value.trim();
             const clave = document.getElementById("clave").value;
-            const usuarios = obtenerUsuarios();
-            const valido = usuarios.find(u => u.correo === correo && u.clave === clave);
-
-            if (!valido) {
+            const ok = await loginUsuario(correo, clave);
+            if (ok) {
+                localStorage.setItem("usuarioLogueado", correo);
+                window.location.href = "notas.html";
+            } else {
                 alert("Correo o contraseña incorrectos");
-                return;
             }
-
-            localStorage.setItem("usuarioLogueado", correo);
-            window.location.href = "notas.html";
         });
     }
 
-    // INTERFAZ DE NOTAS
+    // ================= MOSTRAR NOTAS =================
     const notaForm = document.getElementById("notaForm");
     const listaNotas = document.getElementById("listaNotas");
 
-    function mostrarNotas() {
+    async function mostrarNotas() {
         const usuario = getUsuarioLogueado();
         if (!listaNotas || !usuario) return;
 
-        const notas = obtenerNotas();
+        const notas = await obtenerNotas();
         listaNotas.innerHTML = "";
-        if (!notas[usuario]) return;
+        if (!notas.length) return;
 
-        notas[usuario].forEach((nota, index) => {
+        notas.forEach((nota, index) => {
             const li = document.createElement("li");
             li.classList.add("nota-item");
 
@@ -101,15 +165,13 @@ document.addEventListener("DOMContentLoaded", () => {
             texto.classList.add("nota-texto");
             texto.style.color = nota.color || "black";
 
-            if (nota.tipo === "tarea" && nota.completada) {
-                texto.classList.add("nota-completada");
-            }
+            if (nota.tipo === "tarea" && nota.completada) texto.classList.add("nota-completada");
 
             if (nota.tipo === "tarea") {
                 texto.classList.add("nota-tarea");
-                texto.addEventListener("click", () => {
+                texto.addEventListener("click", async () => {
                     nota.completada = !nota.completada;
-                    guardarNotas(notas);
+                    await actualizarNota({ id: nota.id, completada: nota.completada ? 1 : 0 });
                     mostrarNotas();
                 });
             }
@@ -121,27 +183,20 @@ document.addEventListener("DOMContentLoaded", () => {
             const eliminar = document.createElement("span");
             eliminar.textContent = "Eliminar";
             eliminar.classList.add("nota-eliminar");
-            eliminar.addEventListener("click", () => {
-                notas[usuario].splice(index, 1);
-                guardarNotas(notas);
+            eliminar.addEventListener("click", async () => {
+                await eliminarNota(nota.id);
                 mostrarNotas();
             });
 
             let fechaExtraText = "";
             let fechaExtraColor = "#555";
-
-            if(nota.fechaRecordatorio) {
+            if(nota.fechaRecordatorio){
                 const partes = nota.fechaRecordatorio.split("-");
-                if(partes.length === 3) {
+                if(partes.length === 3){
                     const fechaObj = new Date(partes[0], partes[1]-1, partes[2]);
-                    const hoy = new Date();
-                    hoy.setHours(0,0,0,0);
-
-                    if(fechaObj.getTime() === hoy.getTime()) {
-                        fechaExtraColor = "#e74c3c";
-                    } else if(fechaObj.getTime() < hoy.getTime()) {
-                        fechaExtraColor = "#c0392b";
-                    }
+                    const hoy = new Date(); hoy.setHours(0,0,0,0);
+                    if(fechaObj.getTime() === hoy.getTime()) fechaExtraColor = "#e74c3c";
+                    else if(fechaObj.getTime() < hoy.getTime()) fechaExtraColor = "#c0392b";
                     fechaExtraText = `Día: ${partes[2]}/${partes[1]}/${partes[0]}`;
                 }
             }
@@ -156,191 +211,120 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    // ================= SUBMIT NOTA =================
     if (notaForm) {
-        notaForm.addEventListener("submit", e => {
+        notaForm.addEventListener("submit", async e => {
             e.preventDefault();
             const texto = document.getElementById("notaTexto").value.trim();
             if (!texto) return;
 
-            const usuario = getUsuarioLogueado();
-            const notas = obtenerNotas();
-            if (!notas[usuario]) notas[usuario] = [];
-
             const tipo = document.getElementById("tipoNota").value;
-            const usuarios = obtenerUsuarios();
-            const usuarioObj = usuarios.find(u => u.correo === getUsuarioLogueado());
-            const plan = usuarioObj?.plan || "normal";
-            const recordatoriosExistentes = (notas[usuario] || []).filter(n => n.tipo === "recordatorio").length;
+            const fechaRecordatorio = (tipo === "recordatorio") ? document.getElementById("fechaRecordatorio").value || "" : "";
 
-            if(tipo === "recordatorio" && plan === "normal" && recordatoriosExistentes >= 5) {
+            // Límite de recordatorios
+            const notasExistentes = await obtenerNotas();
+            const correo = getUsuarioLogueado();
+            const resUser = await fetch(`api.php?action=getUsuario&correo=${correo}`);
+            const usuarioObj = await resUser.json();
+            const plan = usuarioObj.plan || "normal";
+            const recordatoriosExistentes = notasExistentes.filter(n => n.tipo === "recordatorio").length;
+            if(tipo === "recordatorio" && plan==="normal" && recordatoriosExistentes>=5){
                 alert("Has alcanzado el máximo de 5 recordatorios para el plan Normal. Actualiza a Premium para ilimitados.");
                 return;
             }
 
-            let fechaRecordatorio = (tipo === "recordatorio") ? document.getElementById("fechaRecordatorio").value || "" : "";
-
-            notas[usuario].push({
+            const nota = {
                 texto,
                 tipo,
                 fecha: new Date().toLocaleDateString(),
-                fechaRecordatorio: fechaRecordatorio,
+                fechaRecordatorio,
                 completada: false,
                 color: colorSeleccionado
-            });
+            };
 
-            guardarNotas(notas);
+            await guardarNotas(nota);
             notaForm.reset();
             mostrarNotas();
         });
         mostrarNotas();
     }
 
-    // LOGOUT
+    // ================= LOGOUT =================
     const btnLogout = document.getElementById("btnLogout");
-    if (btnLogout) {
-        btnLogout.addEventListener("click", () => {
-            localStorage.removeItem("usuarioLogueado");
-            window.location.href = "pag_IniciarSesion.html";
+    if(btnLogout) btnLogout.addEventListener("click", () => {
+        localStorage.removeItem("usuarioLogueado");
+        window.location.href="pag_IniciarSesion.html";
+    });
+
+    // ================= CAMPOS DINÁMICOS =================
+    const tipoNotaSelect = document.getElementById("tipoNota");
+    const fechaRecordatorioInput = document.getElementById("recordatorioFechaContainer");
+    if(tipoNotaSelect && fechaRecordatorioInput){
+        tipoNotaSelect.addEventListener("change", ()=>{
+            fechaRecordatorioInput.style.display = (tipoNotaSelect.value==="recordatorio")?"block":"none";
         });
     }
-});
 
-// FUNCIONES DE CARGA DE INTERFAZ GLOBAL
-function cargarHeaderUsuario() {
-    const correo = localStorage.getItem("usuarioLogueado");
-    const btnsNoAuth = document.querySelectorAll(".auth-no");
-    const btnsAuth = document.querySelectorAll(".auth-yes");
-    const userNameSpan = document.getElementById("userName");
-
-    if (!correo) {
-        btnsNoAuth.forEach(b => b.style.display = "inline-block");
-        btnsAuth.forEach(b => b.style.display = "none");
-        return;
-    }
-
-    const usuarios = JSON.parse(localStorage.getItem("usuarios")) || [];
-    const usuario = usuarios.find(u => u.correo === correo);
-
-    btnsNoAuth.forEach(b => b.style.display = "none");
-    btnsAuth.forEach(b => b.style.display = "inline-block");
-
-    if (usuario && userNameSpan) {
-        userNameSpan.textContent = `Hola, ${usuario.usuario}`;
-    }
-}
-
-function cargarPlanUsuario() {
-    const correo = localStorage.getItem("usuarioLogueado");
-    const userPlanP = document.getElementById("userPlan");
-    if (!correo || !userPlanP) return;
-
-    const usuarios = JSON.parse(localStorage.getItem("usuarios")) || [];
-    const usuario = usuarios.find(u => u.correo === correo);
-    if (!usuario) return;
-
-    if (!usuario.plan) {
-        usuario.plan = "normal";
-        localStorage.setItem("usuarios", JSON.stringify(usuarios));
-    }
-
-    if (usuario.plan === "premium") {
-        userPlanP.textContent = "Plan: Premium 👑";
-        userPlanP.style.color = "#b8860b";
-        userPlanP.style.fontWeight = "bold";
-    } else {
-        userPlanP.textContent = "Plan: Normal";
-        userPlanP.style.color = "#555";
-    }
-}
-
-function protegerLinksAuth() {
-    const usuario = localStorage.getItem("usuarioLogueado");
-    if (!usuario) return;
-    const links = document.querySelectorAll(".auth-link");
-    links.forEach(link => {
-        link.addEventListener("click", function (e) {
-            e.preventDefault();
-            window.location.href = "notas.html";
+    // ================= COLORES PREMIUM =================
+    let colorSeleccionado="black";
+    const colorCirculos = document.querySelectorAll(".color-circle");
+    colorCirculos.forEach(c=>{
+        c.addEventListener("click", async ()=>{
+            const correo = getUsuarioLogueado();
+            const res = await fetch(`api.php?action=getUsuario&correo=${correo}`);
+            const usuarioObj = await res.json();
+            if(usuarioObj.plan!=="premium"){
+                alert("Solo los usuarios Premium pueden seleccionar colores personalizados.");
+                return;
+            }
+            colorCirculos.forEach(c2=>c2.classList.remove("selected"));
+            c.classList.add("selected");
+            colorSeleccionado=c.dataset.color;
         });
     });
-}
 
-// EVENTOS DE DOCUMENTO
-document.addEventListener("DOMContentLoaded", cargarHeaderUsuario);
-document.addEventListener("DOMContentLoaded", cargarPlanUsuario);
-document.addEventListener("DOMContentLoaded", protegerLinksAuth);
-
-// GESTIÓN DE CAMPOS DINÁMICOS
-const tipoNotaSelect = document.getElementById("tipoNota");
-const fechaRecordatorioInput = document.getElementById("recordatorioFechaContainer");
-
-if(tipoNotaSelect && fechaRecordatorioInput) {
-    tipoNotaSelect.addEventListener("change", () => {
-        fechaRecordatorioInput.style.display = (tipoNotaSelect.value === "recordatorio") ? "block" : "none";
-    });
-}
-
-// SELECTOR DE COLORES PREMIUM
-let colorSeleccionado = "black";
-const colorCirculos = document.querySelectorAll(".color-circle");
-colorCirculos.forEach(c => {
-    c.addEventListener("click", () => {
-        const usuarios = JSON.parse(localStorage.getItem("usuarios")) || [];
-        const usuarioObj = usuarios.find(u => u.correo === localStorage.getItem("usuarioLogueado"));
-        const plan = usuarioObj?.plan || "normal";
-
-        if(plan !== "premium") {
-            alert("Solo los usuarios Premium pueden seleccionar colores personalizados.");
-            return;
-        }
-
-        colorCirculos.forEach(c2 => c2.classList.remove("selected"));
-        c.classList.add("selected");
-        colorSeleccionado = c.dataset.color;
-    });
-});
-
-// MENÚ DE USUARIO INTERACTIVO
-document.addEventListener("DOMContentLoaded", () => {
+    // ================= USER MENU =================
     const userName = document.getElementById("userName");
     const userMenu = document.querySelector(".user-menu");
-    if (!userName || !userMenu) return;
+    if(userName && userMenu){
+        userName.addEventListener("click", e=>{
+            e.stopPropagation();
+            userMenu.classList.toggle("open");
+        });
+        document.addEventListener("click", ()=>userMenu.classList.remove("open"));
+    }
 
-    userName.addEventListener("click", (e) => {
-        e.stopPropagation();
-        userMenu.classList.toggle("open");
-    });
-
-    document.addEventListener("click", () => {
-        userMenu.classList.remove("open");
-    });
-});
-
-// ACTIVACIÓN DE PLAN PREMIUM
-document.addEventListener("DOMContentLoaded", () => {
+    // ================= PLAN PREMIUM =================
     const btnPremium = document.getElementById("btnPremium");
-    if (!btnPremium) return;
+    if(btnPremium){
+        btnPremium.addEventListener("click", async ()=>{
+            const correo = getUsuarioLogueado();
+            if(!correo){
+                alert("Debes iniciar sesión para activar el Plan Premium");
+                window.location.href = "pag_IniciarSesion.html";
+                return;
+            }
+            await fetch(`api.php?action=activarPremium&correo=${correo}`);
+            alert("Plan Premium activado correctamente");
+            location.reload();
+        });
+    }
 
-    btnPremium.addEventListener("click", () => {
-        const correo = localStorage.getItem("usuarioLogueado");
-        if (!correo) {
-            alert("Debes iniciar sesión para activar el Plan Premium");
-            window.location.href = "pag_IniciarSesion.html";
-            return;
+    // ================= CARGAR HEADER =================
+    (async ()=>{
+        const nombre = await getNombreUsuario();
+        const correo = getUsuarioLogueado();
+        const btnsNoAuth = document.querySelectorAll(".auth-no");
+        const btnsAuth = document.querySelectorAll(".auth-yes");
+        const userNameSpan = document.getElementById("userName");
+        if(!correo){
+            btnsNoAuth.forEach(b=>b.style.display="inline-block");
+            btnsAuth.forEach(b=>b.style.display="none");
+        } else{
+            btnsNoAuth.forEach(b=>b.style.display="none");
+            btnsAuth.forEach(b=>b.style.display="inline-block");
+            if(userNameSpan) userNameSpan.textContent=`Hola, ${nombre}`;
         }
+    })();
 
-        const usuarios = JSON.parse(localStorage.getItem("usuarios")) || [];
-        const index = usuarios.findIndex(u => u.correo === correo);
-        if (index === -1) return;
-
-        if (usuarios[index].plan === "premium") {
-            alert("El Plan Premium ya está activo en esta cuenta");
-            return;
-        }
-
-        usuarios[index].plan = "premium";
-        localStorage.setItem("usuarios", JSON.stringify(usuarios));
-        alert("Plan Premium activado correctamente");
-        location.reload();
-    });
 });
