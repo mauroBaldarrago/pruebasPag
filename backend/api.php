@@ -1,17 +1,21 @@
 <?php
 header("Content-Type: application/json");
 
-// ================= CONFIGURACIÓN =================
-$host = "remotemysql.com";     // Cambia por tu host remoto
-$dbname = "agenda_plus";       // Cambia por tu DB
-$user = "usuario";             // Cambia por tu usuario
-$pass = "clave123";            // Cambia por tu contraseña
+// ================= CONFIGURACIÓN REAL PARA RAILWAY =================
+// getenv() leerá automáticamente las variables de tu panel de Railway
+$host = getenv('MYSQLHOST') ?: "tu_host_aqui"; 
+$dbname = getenv('MYSQLDATABASE') ?: "railway";
+$user = getenv('MYSQLUSER') ?: "root";
+$pass = getenv('MYSQLPASSWORD') ?: "tu_clave_aqui";
+$port = getenv('MYSQLPORT') ?: "3306";
 
 try {
-    $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8", $user, $pass);
+    // Añadimos el puerto a la cadena de conexión
+    $dsn = "mysql:host=$host;port=$port;dbname=$dbname;charset=utf8";
+    $pdo = new PDO($dsn, $user, $pass);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 } catch (PDOException $e) {
-    die(json_encode(["error" => $e->getMessage()]));
+    die(json_encode(["error" => "Error de conexión: " . $e->getMessage()]));
 }
 
 // ================= ACCIONES =================
